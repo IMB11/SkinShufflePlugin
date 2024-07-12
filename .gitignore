@@ -63,6 +63,9 @@ out/
 run/
 logs/
 
+## Keep eulas
+!versions/*/run/eula.txt
+
 Paper-Server
 Paper-API
 Paperclip.jar
@@ -74,5 +77,3 @@ paperclip.properties
 
 test-plugin.settings.gradle.kts
 paper-api-generator.settings.gradle.kts
-
-!**/eula.txt
