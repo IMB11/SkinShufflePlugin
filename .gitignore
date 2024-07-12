@@ -74,3 +74,5 @@ paperclip.properties
 
 test-plugin.settings.gradle.kts
 paper-api-generator.settings.gradle.kts
+
+!**/eula.txt
