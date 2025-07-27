@@ -6,30 +6,28 @@ import com.mojang.authlib.properties.Property;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
 import org.bukkit.Bukkit;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-/*? if <1.20.4 {*//*
-import org.bukkit.craftbukkit.v1_20_R1.entity.CraftPlayer;
-*//*?} else {*/
-    /*? if <1.20.6 {*/
-    /*import org.bukkit.craftbukkit.v1_20_R3.entity.CraftPlayer;
-    *//*?} else {*/
-    import org.bukkit.craftbukkit.entity.CraftPlayer;
-    /*?}*/
-/*?}*/
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 
 import java.lang.reflect.InvocationTargetException;
 
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public final class SkinShufflePlugin extends JavaPlugin implements Listener, PluginMessageListener {
-    public final static String CBS = Bukkit.getServer().getClass().getPackage().getName();
-    public final static Logger LOGGER = LoggerFactory.getLogger(SkinShufflePlugin.class);
+
+    public static final String CBS = Bukkit.getServer().getClass().getPackage().getName();
+    private static boolean debugMode = false;
+    private static Logger logger;
 
     public static Class<?> bukkitClass(String clazz) throws ClassNotFoundException {
         return Class.forName(CBS + "." + clazz);
@@ -37,72 +35,72 @@ public final class SkinShufflePlugin extends JavaPlugin implements Listener, Plu
 
     @Override
     public void onEnable() {
-        // Plugin startup logic
-        LOGGER.info("SkinShuffle plugin enabled");
+        logger = LoggerFactory.getLogger(getClass());
+
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getMessenger().registerOutgoingPluginChannel(this, "skinshuffle:handshake");
-
-        /*? if <1.20.6 {*//*
-        getServer().getMessenger().registerIncomingPluginChannel(this, "skinshuffle:refresh", this);
-        *//*?} else {*/
         getServer().getMessenger().registerIncomingPluginChannel(this, "skinshuffle:skin_refresh", this);
-        /*?}*/
+        getCommand("skinshuffle").setExecutor(new SkinShuffleCommand());
 
-//        getServer().getMessenger().registerIncomingPluginChannel(this, "skinshuffle:refresh_player_list_entry", this);
-        // Don't need player list refresh, handled by paper.
+        if (debugMode) {
+            logger.info("SkinShuffle plugin enabled");
+        }
     }
 
     @Override
-    public void onDisable() {}
+    public void onDisable() {
+        if (debugMode) {
+            logger.info("SkinShuffle plugin disabled");
+        }
+    }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        LOGGER.info("Trying to send skinshuffle handshake to player: {}", event.getPlayer().getName());
-        // Wait for the player to be ready to receive the handshake
+        if (debugMode) {
+            logger.info("Trying to send skinshuffle handshake to player: {}", event.getPlayer().getName());
+        }
+
         getServer().getScheduler().runTaskLater(this, () -> {
-            LOGGER.info("Send packet!");
+            if (debugMode) {
+                logger.info("Send packet!");
+            }
+
             event.getPlayer().sendPluginMessage(this, "skinshuffle:handshake", new byte[0]);
         }, 20L);
     }
 
     @Override
-    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-        LOGGER.info("Received plugin message from player: {}", player.getName());
-        if(channel.equals("skinshuffle:refresh") || channel.equals("skinshuffle:skin_refresh")) {
-            LOGGER.info("Received skin refresh message from player: {}", player.getName());
+    public void onPluginMessageReceived(@NotNull String channel, @NotNull Player player, byte[] message) {
+        if (debugMode) {
+            logger.info("Received plugin message from player: {}", player.getName());
+        }
+
+        if (channel.equals("skinshuffle:refresh") || channel.equals("skinshuffle:skin_refresh")) {
+            if (debugMode) {
+                logger.info("Received skin refresh message from player: {}", player.getName());
+            }
+
             PlayerProfile playerProfile = player.getPlayerProfile();
-            // Get profileProperty from message.
             FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(message));
 
-            /*? if <1.20.6 {*//*
-            Property prop = buf.readProperty();
-            *//*?} else {*/
             Property prop;
-            if(buf.readBoolean()) {
+            if (buf.readBoolean()) {
                 prop = new Property(buf.readUtf(), buf.readUtf(), buf.readUtf());
             } else {
                 prop = new Property(buf.readUtf(), buf.readUtf(), null);
             }
-            /*?}*/
 
             playerProfile.getProperties().removeIf(profileProperty -> profileProperty.getName().equals("textures"));
-
-            /*? if <1.20.4 {*//*
-            playerProfile.getProperties().add(new ProfileProperty("textures", prop.getValue(), prop.getSignature()));
-            *//*?} else {*/
             playerProfile.getProperties().add(new ProfileProperty("textures", prop.value(), prop.signature()));
-            /*?}*/
-
             player.setPlayerProfile(playerProfile);
+
             CraftPlayer craftPlayer = (CraftPlayer) player;
+
             try {
                 var method = bukkitClass("entity.CraftPlayer").getDeclaredMethod("refreshPlayer");
                 method.setAccessible(true);
                 method.invoke(craftPlayer);
 
-                // Also attempt to call org.bukkit.entity.Player#triggerHealthUpdate
-                // if fail, just use player.resetMaxHealth();
-                // fix XP on old paper versions (might not be an issue anymore)
                 try {
                     var triggerHealthUpdate = bukkitClass("entity.CraftPlayer").getDeclaredMethod("triggerHealthUpdate");
                     triggerHealthUpdate.setAccessible(true);
@@ -110,10 +108,23 @@ public final class SkinShufflePlugin extends JavaPlugin implements Listener, Plu
                 } catch (NoSuchMethodException e) {
                     player.resetMaxHealth();
                 }
-            } catch (NoSuchMethodException | ClassNotFoundException | InvocationTargetException |
-                     IllegalAccessException e) {
+            } catch (NoSuchMethodException | ClassNotFoundException | InvocationTargetException | IllegalAccessException e) {
+                logger.error("Failed to refresh player skin", e);
                 throw new RuntimeException(e);
             }
+        }
+    }
+
+    private static class SkinShuffleCommand implements CommandExecutor {
+        @Override
+        public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, String[] args) {
+            if (args.length == 1 && args[0].equalsIgnoreCase("debug")) {
+                debugMode = !debugMode;
+
+                sender.sendMessage("SkinShuffle debug: " + (debugMode ? "enabled" : "disabled"));
+                return true;
+            }
+            return false;
         }
     }
 }

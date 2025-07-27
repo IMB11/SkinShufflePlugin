@@ -3,6 +3,11 @@ version: '${version}'
 main: dev.imb11.skinshuffle.SkinShufflePlugin
 api-version: '${mc}'
 prefix: SkinShuffle
-authors: [IMB11]
+authors: [IMB11, cubelius]
 description: Spigot/Paper Interop for SkinShuffle
 website: https://imb11.dev/
+commands:
+  skinshuffle:
+    description: Toggles debug mode
+    usage: /<command> debug
+    permission: skinshuffle.command
